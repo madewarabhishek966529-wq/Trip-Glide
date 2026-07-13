@@ -69,7 +69,7 @@ class DestinationRail extends StatelessWidget {
               return DestinationCard(
                 destination: destination,
                 onTap: () => Navigator.of(context).pushNamed(
-                  AppRoutes.destinationPreview,
+                  AppRoutes.details,
                   arguments: destination,
                 ),
               );

@@ -1,87 +1,145 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-class DetailsScreen extends StatelessWidget{
- const DetailsScreen({super.key});
+import '../../core/colors.dart';
+import '../../core/constants.dart';
+import '../../models/destination.dart';
+import '../../providers/destination_provider.dart';
+import '../../providers/favorite_provider.dart';
+import '../../repositories/review_repository.dart';
+import '../../routes/app_routes.dart';
+import '../../widgets/app_button.dart';
+import '../../widgets/rating_badge.dart';
+import 'widgets/about_section.dart';
+import 'widgets/booking_button.dart';
+import 'widgets/gallery.dart';
+import 'widgets/info_section.dart';
+import 'widgets/review_list.dart';
 
- @override
- Widget build(BuildContext context){
-  return Scaffold(
-    appBar: AppBar(title: const Text('Destination')),
-    body: const SingleChildScrollView(
-      padding: EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children:[
-          Gallery(),
-          SizedBox(height:20),
-          InfoSection(),
-          SizedBox(height:20),
-          AboutSection(),
-          SizedBox(height:20),
-          ReviewList(),
-          SizedBox(height:24),
-          BookingButton(),
+class DetailsScreen extends StatefulWidget {
+  final Destination destination;
+
+  const DetailsScreen({super.key, required this.destination});
+
+  @override
+  State<DetailsScreen> createState() => _DetailsScreenState();
+}
+
+class _DetailsScreenState extends State<DetailsScreen> {
+  final _reviewRepo = ReviewRepository();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<DestinationProvider>().recordView(widget.destination.id);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = widget.destination;
+    final reviews = _reviewRepo.getForDestination(d.id);
+    final avgRating = _reviewRepo.averageRating(d.id);
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(child: DestinationGallery(destination: d)),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppConstants.spaceLg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(d.city, style: Theme.of(context).textTheme.headlineLarge),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.location_on_outlined, size: 16, color: AppColors.terracotta),
+                                    const SizedBox(width: 4),
+                                    Text(d.country, style: Theme.of(context).textTheme.bodyMedium),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              RatingBadge(rating: avgRating > 0 ? avgRating : d.rating, iconSize: 18),
+                              const SizedBox(height: 4),
+                              Text(
+                                reviews.isEmpty ? 'No reviews yet' : '${reviews.length} reviews',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppConstants.spaceLg),
+                      Wrap(
+                        spacing: AppConstants.spaceSm,
+                        runSpacing: AppConstants.spaceSm,
+                        children: d.tags.map((t) => Chip(label: Text(t))).toList(growable: false),
+                      ),
+                      const SizedBox(height: AppConstants.spaceLg),
+                      AboutSection(description: d.description),
+                      const SizedBox(height: AppConstants.spaceXl),
+                      InfoSection(destination: d),
+                      const SizedBox(height: AppConstants.spaceXl),
+                      ReviewList(reviews: reviews, averageRating: avgRating),
+                      const SizedBox(height: AppConstants.spaceXxl),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Positioned(
+            top: AppConstants.spaceSm,
+            left: AppConstants.spaceMd,
+            child: SafeArea(
+              child: CircleIconButton(
+                icon: Icons.arrow_back_rounded,
+                onPressed: () => Navigator.of(context).pop(),
+                background: Colors.black38,
+                foreground: Colors.white,
+              ),
+            ),
+          ),
+          Positioned(
+            top: AppConstants.spaceSm,
+            right: AppConstants.spaceMd,
+            child: SafeArea(
+              child: Consumer<FavoriteProvider>(
+                builder: (context, favorites, _) {
+                  final isFavorite = favorites.isFavorite(d.id);
+                  return CircleIconButton(
+                    icon: isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                    onPressed: () => favorites.toggle(d.id),
+                    background: Colors.black38,
+                    foreground: isFavorite ? AppColors.terracotta : Colors.white,
+                  );
+                },
+              ),
+            ),
+          ),
         ],
       ),
-    ),
-  );
- }
-}
-
-class Gallery extends StatelessWidget{
- const Gallery({super.key});
- @override
- Widget build(BuildContext context)=>Container(
-   height:260,
-   decoration:BoxDecoration(
-     borderRadius:BorderRadius.circular(24),
-     color:Colors.grey.shade300,
-   ),
-   child:const Center(child:Icon(Icons.image,size:70)),
- );
-}
-
-class InfoSection extends StatelessWidget{
- const InfoSection({super.key});
- @override
- Widget build(BuildContext context)=>const Column(
-   crossAxisAlignment: CrossAxisAlignment.start,
-   children:[
-     Text('Rio de Janeiro',style:TextStyle(fontSize:28,fontWeight:FontWeight.bold)),
-     SizedBox(height:8),
-     Text('Brazil • ⭐ 5.0 (143 reviews)')
-   ],
- );
-}
-
-class AboutSection extends StatelessWidget{
- const AboutSection({super.key});
- @override
- Widget build(BuildContext context)=>const Text(
- 'Rio de Janeiro is known for its beaches, mountains, Carnival festival, and iconic Christ the Redeemer statue.',
- style:TextStyle(height:1.6),
- );
-}
-
-class ReviewList extends StatelessWidget{
- const ReviewList({super.key});
- @override
- Widget build(BuildContext context)=>Column(
-   children: const[
-     ListTile(leading:CircleAvatar(child:Icon(Icons.person)),title:Text('John'),subtitle:Text('Amazing destination!')),
-     ListTile(leading:CircleAvatar(child:Icon(Icons.person)),title:Text('Emily'),subtitle:Text('Loved the experience.')),
-   ],
- );
-}
-
-class BookingButton extends StatelessWidget{
- const BookingButton({super.key});
- @override
- Widget build(BuildContext context)=>SizedBox(
-   width:double.infinity,
-   child:ElevatedButton(
-     onPressed:(){},
-     child:const Text('Book Now'),
-   ),
- );
+      bottomNavigationBar: BookingButton(
+        destination: d,
+        onBook: () => Navigator.of(context).pushNamed(AppRoutes.booking, arguments: d),
+      ),
+    );
+  }
 }
