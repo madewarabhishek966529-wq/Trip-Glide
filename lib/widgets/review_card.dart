@@ -1,0 +1,1 @@
+import 'package:flutter/material.dart'; class ReviewCard extends StatelessWidget{final String user,comment;const ReviewCard({super.key,required this.user,required this.comment});@override Widget build(BuildContext c)=>Card(child:ListTile(leading:CircleAvatar(child:Icon(Icons.person)),title:Text(user),subtitle:Text(comment)));}
