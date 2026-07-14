@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:shimmer/shimmer.dart';
 import '../core/colors.dart';
 
 /// Generic shimmering placeholder rectangle, used both as an image
@@ -10,6 +9,8 @@ class ShimmerBox extends StatelessWidget {
   final BorderRadius? borderRadius;
 
   const ShimmerBox({super.key, this.width, this.height, this.borderRadius});
+
+  get Shimmer => null;
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +38,8 @@ class DestinationCardShimmer extends StatelessWidget {
   final double width;
   final double height;
 
-  const DestinationCardShimmer({super.key, this.width = 240, this.height = 280});
+  const DestinationCardShimmer(
+      {super.key, this.width = 240, this.height = 280});
 
   @override
   Widget build(BuildContext context) {

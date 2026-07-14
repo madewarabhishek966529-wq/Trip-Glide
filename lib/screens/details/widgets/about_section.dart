@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-
 import '../../../core/constants.dart';
 
-/// Description block with a "Read more"/"Read less" toggle so long
-/// descriptions don't push the rest of the page down by default.
+/// Destination description with an expandable "Read more" toggle so long
+/// descriptions don't dominate the screen by default.
 class AboutSection extends StatefulWidget {
   final String description;
-
   const AboutSection({super.key, required this.description});
 
   @override
@@ -21,21 +19,16 @@ class _AboutSectionState extends State<AboutSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('About', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: AppConstants.spaceSm),
         AnimatedCrossFade(
+          duration: AppConstants.animationDuration,
+          crossFadeState: _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
           firstChild: Text(
             widget.description,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodyLarge,
           ),
-          secondChild: Text(
-            widget.description,
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
-          crossFadeState: _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-          duration: AppConstants.animationFast,
+          secondChild: Text(widget.description, style: Theme.of(context).textTheme.bodyLarge),
         ),
         GestureDetector(
           onTap: () => setState(() => _expanded = !_expanded),

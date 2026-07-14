@@ -1,45 +1,53 @@
 import 'package:flutter/material.dart';
-
 import '../core/page_transition.dart';
-import '../models/destination.dart';
-import '../screens/booking/booking_screen.dart';
 import '../screens/details/details_screen.dart';
-import '../screens/main_shell.dart';
+import '../screens/booking/booking_screen.dart';
+import '../screens/booking/booking_history_screen.dart';
+import '../screens/settings/settings_screen.dart';
+import '../screens/root_shell.dart';
 
-/// Central route table. Every screen the app can navigate to is named here
-/// so navigation calls read as `Navigator.pushNamed(context, AppRoutes.x)`
-/// rather than scattering raw string literals (or, worse, direct widget
-/// constructors) through screens.
+/// Centralized route names + a single [onGenerateRoute] so every
+/// `Navigator.pushNamed` call in the app is typo-checked against one
+/// source of truth, and argument types are validated in one place instead
+/// of scattered `as` casts through the UI layer.
 class AppRoutes {
   AppRoutes._();
 
-  static const String main = '/';
+  static const String root = '/';
   static const String details = '/details';
   static const String booking = '/booking';
+  static const String bookingHistory = '/booking-history';
+  static const String settings = '/settings';
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
-      case main:
-        return AppPageRoute(page: const MainShell(), type: TransitionType.fade);
+      case root:
+        return AppPageRoute(page: const RootShell(), type: TransitionType.fade);
 
       case details:
-        final destination = settings.arguments as Destination;
+        final destinationId = settings.arguments as String;
         return AppPageRoute(
-          page: DetailsScreen(destination: destination),
+          page: DetailsScreen(destinationId: destinationId),
           type: TransitionType.slideUp,
         );
 
       case booking:
-        final destination = settings.arguments as Destination;
+        final destinationId = settings.arguments as String;
         return AppPageRoute(
-          page: BookingScreen(destination: destination),
-          type: TransitionType.slideRight,
+          page: BookingScreen(destinationId: destinationId),
+          type: TransitionType.slideUp,
         );
+
+      case bookingHistory:
+        return AppPageRoute(page: const BookingHistoryScreen(), type: TransitionType.slideRight);
+
+      case AppRoutes.settings:
+        return AppPageRoute(page: const SettingsScreen(), type: TransitionType.slideRight);
 
       default:
         return AppPageRoute(
           page: Scaffold(
-            body: Center(child: Text('No route defined for "${settings.name}"')),
+            body: Center(child: Text('Route "${settings.name}" not found')),
           ),
         );
     }

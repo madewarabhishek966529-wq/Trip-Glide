@@ -1,64 +1,35 @@
 import 'package:flutter/material.dart';
-
 import '../../../core/constants.dart';
 import '../../../models/destination.dart';
-import '../../../routes/app_routes.dart';
 import '../../../widgets/destination_card.dart';
-import '../../../widgets/empty_state.dart';
 import '../../../widgets/section_header.dart';
-import '../../../widgets/shimmer_box.dart';
 
-/// A titled horizontal-scrolling rail of [DestinationCard]s. Used for every
-/// curated section on Home (Popular, Recommended, Top rated, Recently
-/// viewed) so those sections are pure composition over this one widget.
+/// A titled horizontal rail of [DestinationCard]s — reused for Popular,
+/// Recommended, Top rated, and Recently viewed sections.
 class DestinationRail extends StatelessWidget {
   final String title;
   final List<Destination> destinations;
-  final bool isLoading;
-  final String emptyMessage;
+  final ValueChanged<Destination> onTap;
   final VoidCallback? onSeeAll;
 
   const DestinationRail({
     super.key,
     required this.title,
     required this.destinations,
-    this.isLoading = false,
-    this.emptyMessage = 'Nothing here yet.',
+    required this.onTap,
     this.onSeeAll,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionHeader(title: title),
-          const DestinationRailShimmer(),
-        ],
-      );
-    }
-
-    if (destinations.isEmpty) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionHeader(title: title),
-          EmptyState(
-            icon: Icons.travel_explore_outlined,
-            title: 'Nothing here yet',
-            message: emptyMessage,
-          ),
-        ],
-      );
-    }
+    if (destinations.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionHeader(title: title, onSeeAll: onSeeAll),
         SizedBox(
-          height: 280,
+          height: 260,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: AppConstants.spaceLg),
@@ -68,10 +39,9 @@ class DestinationRail extends StatelessWidget {
               final destination = destinations[index];
               return DestinationCard(
                 destination: destination,
-                onTap: () => Navigator.of(context).pushNamed(
-                  AppRoutes.details,
-                  arguments: destination,
-                ),
+                width: 200,
+                height: 260,
+                onTap: () => onTap(destination),
               );
             },
           ),

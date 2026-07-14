@@ -1,144 +1,147 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
-import '../../core/colors.dart';
 import '../../core/constants.dart';
-import '../../models/destination.dart';
+import '../../core/utils/formatters.dart';
 import '../../providers/destination_provider.dart';
 import '../../providers/favorite_provider.dart';
 import '../../repositories/review_repository.dart';
 import '../../routes/app_routes.dart';
 import '../../widgets/app_button.dart';
+import '../../widgets/error_view.dart';
 import '../../widgets/rating_badge.dart';
 import 'widgets/about_section.dart';
-import 'widgets/booking_button.dart';
 import 'widgets/gallery.dart';
-import 'widgets/info_section.dart';
-import 'widgets/review_list.dart';
+import 'widgets/review_section.dart';
+import 'widgets/travel_info_panel.dart';
 
-class DetailsScreen extends StatefulWidget {
-  final Destination destination;
-
-  const DetailsScreen({super.key, required this.destination});
-
-  @override
-  State<DetailsScreen> createState() => _DetailsScreenState();
-}
-
-class _DetailsScreenState extends State<DetailsScreen> {
-  final _reviewRepo = ReviewRepository();
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<DestinationProvider>().recordView(widget.destination.id);
-    });
-  }
+/// Destination detail screen: gallery, rating/location header, expandable
+/// description, travel info + weather panel, reviews, and a sticky
+/// "Book a tour" button — matching the "Iconic Brazil" detail screen in
+/// the design reference.
+class DetailsScreen extends StatelessWidget {
+  final String destinationId;
+  const DetailsScreen({super.key, required this.destinationId});
 
   @override
   Widget build(BuildContext context) {
-    final d = widget.destination;
-    final reviews = _reviewRepo.getForDestination(d.id);
-    final avgRating = _reviewRepo.averageRating(d.id);
+    final destination = context.watch<DestinationProvider>().byId(destinationId);
+
+    if (destination == null) {
+      return Scaffold(
+        appBar: AppBar(),
+        body: const Center(
+          child: ErrorView(message: 'This destination could not be found.'),
+        ),
+      );
+    }
+
+    final reviews = ReviewRepository().getForDestination(destinationId);
+    final averageRating = reviews.isEmpty
+        ? destination.rating
+        : reviews.fold<double>(0, (sum, r) => sum + r.rating) / reviews.length;
 
     return Scaffold(
-      body: Stack(
-        children: [
-          CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(child: DestinationGallery(destination: d)),
-              SliverToBoxAdapter(
-                child: Padding(
+      body: SafeArea(
+        top: false,
+        child: Stack(
+          children: [
+            ListView(
+              padding: const EdgeInsets.only(bottom: 110),
+              children: [
+                DetailsGallery(destinationId: destination.id, images: destination.gallery),
+                Padding(
                   padding: const EdgeInsets.all(AppConstants.spaceLg),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(d.city, style: Theme.of(context).textTheme.headlineLarge),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    const Icon(Icons.location_on_outlined, size: 16, color: AppColors.terracotta),
-                                    const SizedBox(width: 4),
-                                    Text(d.country, style: Theme.of(context).textTheme.bodyMedium),
-                                  ],
-                                ),
+                                Text(destination.city, style: Theme.of(context).textTheme.headlineLarge),
+                                const SizedBox(height: 2),
+                                Text(destination.fullLocation, style: Theme.of(context).textTheme.bodyMedium),
                               ],
                             ),
                           ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              RatingBadge(rating: avgRating > 0 ? avgRating : d.rating, iconSize: 18),
-                              const SizedBox(height: 4),
-                              Text(
-                                reviews.isEmpty ? 'No reviews yet' : '${reviews.length} reviews',
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
+                          RatingBadge(rating: averageRating, showBackground: true),
                         ],
                       ),
                       const SizedBox(height: AppConstants.spaceLg),
-                      Wrap(
-                        spacing: AppConstants.spaceSm,
-                        runSpacing: AppConstants.spaceSm,
-                        children: d.tags.map((t) => Chip(label: Text(t))).toList(growable: false),
-                      ),
-                      const SizedBox(height: AppConstants.spaceLg),
-                      AboutSection(description: d.description),
+                      AboutSection(description: destination.description),
                       const SizedBox(height: AppConstants.spaceXl),
-                      InfoSection(destination: d),
+                      TravelInfoPanel(destination: destination),
                       const SizedBox(height: AppConstants.spaceXl),
-                      ReviewList(reviews: reviews, averageRating: avgRating),
-                      const SizedBox(height: AppConstants.spaceXxl),
+                      ReviewSection(reviews: reviews, averageRating: averageRating),
                     ],
                   ),
                 ),
-              ),
-            ],
-          ),
-          Positioned(
-            top: AppConstants.spaceSm,
-            left: AppConstants.spaceMd,
-            child: SafeArea(
-              child: CircleIconButton(
-                icon: Icons.arrow_back_rounded,
-                onPressed: () => Navigator.of(context).pop(),
-                background: Colors.black38,
-                foreground: Colors.white,
-              ),
+              ],
             ),
-          ),
-          Positioned(
-            top: AppConstants.spaceSm,
-            right: AppConstants.spaceMd,
-            child: SafeArea(
-              child: Consumer<FavoriteProvider>(
-                builder: (context, favorites, _) {
-                  final isFavorite = favorites.isFavorite(d.id);
-                  return CircleIconButton(
-                    icon: isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                    onPressed: () => favorites.toggle(d.id),
+            Positioned(
+              top: AppConstants.spaceMd,
+              left: AppConstants.spaceMd,
+              right: AppConstants.spaceMd,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  CircleIconButton(
+                    icon: Icons.arrow_back_rounded,
                     background: Colors.black38,
-                    foreground: isFavorite ? AppColors.terracotta : Colors.white,
-                  );
-                },
+                    foreground: Colors.white,
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  Consumer<FavoriteProvider>(
+                    builder: (context, favorites, _) => CircleIconButton(
+                      icon: favorites.isFavorite(destination.id) ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                      background: Colors.black38,
+                      foreground: favorites.isFavorite(destination.id) ? const Color(0xFFE07856) : Colors.white,
+                      onPressed: () => favorites.toggle(destination.id),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: BookingButton(
-        destination: d,
-        onBook: () => Navigator.of(context).pushNamed(AppRoutes.booking, arguments: d),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(
+                  AppConstants.spaceLg,
+                  AppConstants.spaceMd,
+                  AppConstants.spaceLg,
+                  AppConstants.spaceLg,
+                ),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 12, offset: const Offset(0, -4))],
+                ),
+                child: Row(
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('From', style: Theme.of(context).textTheme.bodySmall),
+                        Text(AppFormatters.currency(destination.price), style: Theme.of(context).textTheme.headlineSmall),
+                      ],
+                    ),
+                    const SizedBox(width: AppConstants.spaceLg),
+                    Expanded(
+                      child: PrimaryButton(
+                        label: 'Book a tour',
+                        onPressed: () => Navigator.of(context).pushNamed(AppRoutes.booking, arguments: destination.id),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

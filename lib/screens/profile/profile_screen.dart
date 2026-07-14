@@ -1,77 +1,125 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../core/colors.dart';
+import '../../core/constants.dart';
+import '../../providers/user_provider.dart';
+import '../../routes/app_routes.dart';
+import '../../widgets/avatar_widget.dart';
 
-class ProfileScreen extends StatelessWidget{
+class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context){
+  Widget build(BuildContext context) {
+    final user = context.watch<UserProvider>();
+    final profile = user.profile;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
-      body: const SingleChildScrollView(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          children:[
-            ProfileHeader(),
-            SizedBox(height:24),
-            ProfileStats(),
-            SizedBox(height:24),
-            ProfileMenu(),
-          ],
-        ),
+      body: SafeArea(
+        child: profile == null
+            ? Center(child: Text(user.errorMessage ?? 'No profile found.'))
+            : ListView(
+                padding: const EdgeInsets.all(AppConstants.spaceLg),
+                children: [
+                  Center(
+                    child: Column(
+                      children: [
+                        AvatarWidget(imageUrl: profile.avatar, name: profile.name, radius: 44),
+                        const SizedBox(height: AppConstants.spaceMd),
+                        Text(profile.name, style: Theme.of(context).textTheme.headlineSmall),
+                        const SizedBox(height: 2),
+                        Text(profile.email, style: Theme.of(context).textTheme.bodyMedium),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppConstants.spaceXl),
+                  _StatsRow(
+                    trips: user.tripsCompleted,
+                    favorites: user.favoritesCount,
+                  ),
+                  const SizedBox(height: AppConstants.spaceXl),
+                  _MenuTile(
+                    icon: Icons.card_travel_rounded,
+                    label: 'My bookings',
+                    onTap: () => Navigator.of(context).pushNamed(AppRoutes.bookingHistory),
+                  ),
+                  _MenuTile(
+                    icon: Icons.settings_outlined,
+                    label: 'Settings',
+                    onTap: () => Navigator.of(context).pushNamed(AppRoutes.settings),
+                  ),
+                  const _MenuTile(icon: Icons.help_outline_rounded, label: 'Help & support'),
+                ],
+              ),
       ),
     );
   }
 }
 
-class ProfileHeader extends StatelessWidget{
-  const ProfileHeader({super.key});
-  @override
-  Widget build(BuildContext context){
-    return const Column(
-      children:[
-        CircleAvatar(radius:50,child:Icon(Icons.person,size:50)),
-        SizedBox(height:12),
-        Text('Abhishek',style:TextStyle(fontSize:24,fontWeight:FontWeight.bold)),
-        Text('Flutter Developer'),
-      ],
-    );
-  }
-}
+class _StatsRow extends StatelessWidget {
+  final int trips;
+  final int favorites;
 
-class ProfileStats extends StatelessWidget{
-  const ProfileStats({super.key});
+  const _StatsRow({required this.trips, required this.favorites});
+
   @override
-  Widget build(BuildContext context){
-    return const Row(
+  Widget build(BuildContext context) {
+    return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children:[
-        _Stat(title:'Trips',value:'12'),
-        _Stat(title:'Favorites',value:'8'),
-        _Stat(title:'Reviews',value:'20'),
+      children: [
+        _Stat(label: 'Trips', value: '$trips'),
+        _VerticalDivider(),
+        _Stat(label: 'Favorites', value: '$favorites'),
       ],
     );
   }
 }
 
-class _Stat extends StatelessWidget{
-  final String title,value;
-  const _Stat({required this.title,required this.value});
+class _VerticalDivider extends StatelessWidget {
   @override
-  Widget build(BuildContext context)=>Column(children:[
-    Text(value,style:TextStyle(fontSize:22,fontWeight:FontWeight.bold)),
-    SizedBox(height:4),
-    Text(title),
-  ]);
+  Widget build(BuildContext context) => Container(width: 1, height: 36, color: Theme.of(context).dividerColor);
 }
 
-class ProfileMenu extends StatelessWidget{
-  const ProfileMenu({super.key});
+class _Stat extends StatelessWidget {
+  final String label;
+  final String value;
+  const _Stat({required this.label, required this.value});
+
   @override
-  Widget build(BuildContext context){
-    return Column(children:[
-      ListTile(leading:Icon(Icons.settings),title:Text('Settings')),
-      ListTile(leading:Icon(Icons.favorite),title:Text('Favorites')),
-      ListTile(leading:Icon(Icons.logout,color:Colors.red),title:Text('Logout')),
-    ]);
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(value, style: Theme.of(context).textTheme.headlineMedium),
+        const SizedBox(height: 2),
+        Text(label, style: Theme.of(context).textTheme.bodyMedium),
+      ],
+    );
+  }
+}
+
+class _MenuTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+
+  const _MenuTile({required this.icon, required this.label, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Card(
+      margin: const EdgeInsets.only(bottom: AppConstants.spaceSm),
+      elevation: 0,
+      color: isDark ? AppColors.darkSurfaceAlt : AppColors.lightSurfaceAlt,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppConstants.radiusMd)),
+      child: ListTile(
+        leading: Icon(icon),
+        title: Text(label),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: onTap,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppConstants.radiusMd)),
+      ),
+    );
   }
 }

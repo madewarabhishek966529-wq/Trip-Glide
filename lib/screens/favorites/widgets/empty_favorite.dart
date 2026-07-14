@@ -1,1 +1,0 @@
-export '../favorite_screen.dart' show EmptyFavorite;

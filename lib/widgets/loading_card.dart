@@ -1,1 +1,0 @@
-import 'package:flutter/material.dart'; class LoadingCard extends StatelessWidget{const LoadingCard({super.key});@override Widget build(BuildContext c)=>Container(height:220,width:240,decoration:BoxDecoration(color:Colors.grey.shade300,borderRadius:BorderRadius.circular(20)));}

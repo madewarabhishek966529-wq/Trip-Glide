@@ -1,23 +1,23 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
-import '../../core/colors.dart';
 import '../../core/constants.dart';
-import '../../core/utils/formatters.dart';
 import '../../models/booking.dart';
-import '../../models/destination.dart';
 import '../../providers/booking_provider.dart';
+import '../../providers/destination_provider.dart';
 import '../../widgets/app_button.dart';
+import '../../widgets/error_view.dart';
+import '../../widgets/guest_stepper.dart';
 import 'widgets/date_selector.dart';
-import 'widgets/guest_counter.dart';
 import 'widgets/price_summary.dart';
 import 'widgets/time_selector.dart';
 
+/// The booking flow: date + time + guest count -> live price calculation
+/// -> confirm -> confirmation dialog. All draft state lives in
+/// [BookingProvider] so leaving and returning to this screen (e.g. via
+/// back button) doesn't silently lose progress within the same session.
 class BookingScreen extends StatefulWidget {
-  final Destination destination;
-
-  const BookingScreen({super.key, required this.destination});
+  final String destinationId;
+  const BookingScreen({super.key, required this.destinationId});
 
   @override
   State<BookingScreen> createState() => _BookingScreenState();
@@ -27,63 +27,46 @@ class _BookingScreenState extends State<BookingScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<BookingProvider>().startDraft();
-    });
+    context.read<BookingProvider>().startDraft();
   }
 
-  Future<void> _confirm(BuildContext context) async {
-    final provider = context.read<BookingProvider>();
-    if (!provider.isDraftValid) {
+  Future<void> _confirm() async {
+    final destination = context.read<DestinationProvider>().byId(widget.destinationId);
+    if (destination == null) return;
+
+    final bookingProvider = context.read<BookingProvider>();
+    final booking = await bookingProvider.confirmBooking(destination);
+
+    if (!mounted) return;
+
+    if (booking == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a date before confirming.')),
+        SnackBar(content: Text(bookingProvider.errorMessage ?? 'Could not complete booking.')),
       );
       return;
     }
-    final booking = await provider.confirmBooking(widget.destination);
-    if (!mounted) return;
-    if (booking != null) {
-      await _showConfirmation(context, booking);
-    } else if (provider.errorMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(provider.errorMessage!)));
-    }
+
+    await _showConfirmation(booking);
   }
 
-  Future<void> _showConfirmation(BuildContext context, Booking booking) {
-    return showDialog(
+  Future<void> _showConfirmation(Booking booking) async {
+    await showDialog<void>(
       context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        icon: const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 40),
-        title: const Text('Booking confirmed'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('${widget.destination.city}, ${widget.destination.country}',
-                style: Theme.of(dialogContext).textTheme.titleMedium),
-            const SizedBox(height: AppConstants.spaceSm),
-            Text(AppFormatters.dateWithWeekday(booking.date)),
-            Text('${booking.time} \u00b7 ${AppFormatters.guestCount(booking.guests)}'),
-            const SizedBox(height: AppConstants.spaceSm),
-            Text(
-              'Total paid: ${AppFormatters.currency(booking.totalPrice)}',
-              style: Theme.of(dialogContext).textTheme.titleMedium,
-            ),
-          ],
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 40),
+        title: const Text('Booking confirmed!'),
+        content: Text(
+          'Your trip for ${booking.guests} guest${booking.guests > 1 ? 's' : ''} on '
+          '${booking.date.month}/${booking.date.day}/${booking.date.year} at ${booking.time} is all set.',
+          textAlign: TextAlign.center,
         ),
         actions: [
-          SizedBox(
-            width: double.infinity,
-            child: PrimaryButton(
-              label: 'Done',
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                Navigator.of(context)
-                  ..pop() // close BookingScreen
-                  ..pop(); // close DetailsScreen, back to the tab list
-              },
-            ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(); // dialog
+              Navigator.of(context).pop(); // booking screen
+            },
+            child: const Text('Done'),
           ),
         ],
       ),
@@ -92,80 +75,60 @@ class _BookingScreenState extends State<BookingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final destination = context.watch<DestinationProvider>().byId(widget.destinationId);
     final booking = context.watch<BookingProvider>();
-    final d = widget.destination;
+
+    if (destination == null) {
+      return Scaffold(
+        appBar: AppBar(),
+        body: const Center(child: ErrorView(message: 'This destination could not be found.')),
+      );
+    }
+
+    final total = booking.calculateTotal(destination);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Book your trip')),
+      appBar: AppBar(title: Text('Book ${destination.city}')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(AppConstants.spaceLg),
           children: [
-            _DestinationSummary(destination: d),
-            const SizedBox(height: AppConstants.spaceXl),
             DateSelector(selectedDate: booking.draftDate, onDateSelected: booking.setDraftDate),
-            const SizedBox(height: AppConstants.spaceXl),
+            const SizedBox(height: AppConstants.spaceLg),
             TimeSelector(selectedTime: booking.draftTime, onTimeSelected: booking.setDraftTime),
-            const SizedBox(height: AppConstants.spaceXl),
-            GuestCounter(
-              value: booking.draftGuests,
-              onIncrement: booking.incrementGuests,
-              onDecrement: booking.decrementGuests,
+            const SizedBox(height: AppConstants.spaceLg),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Guests', style: Theme.of(context).textTheme.bodySmall),
+                GuestStepper(
+                  value: booking.draftGuests,
+                  min: AppConstants.minGuestsPerBooking,
+                  max: AppConstants.maxGuestsPerBooking,
+                  onIncrement: booking.incrementGuests,
+                  onDecrement: booking.decrementGuests,
+                ),
+              ],
             ),
             const SizedBox(height: AppConstants.spaceXl),
-            PriceSummary(destination: d, guests: booking.draftGuests),
+            PriceSummary(destination: destination, guests: booking.draftGuests, total: total),
             const SizedBox(height: AppConstants.spaceXl),
             PrimaryButton(
               label: 'Confirm booking',
               isLoading: booking.isSubmitting,
-              onPressed: () => _confirm(context),
+              onPressed: booking.isDraftValid ? _confirm : null,
             ),
+            if (!booking.isDraftValid)
+              Padding(
+                padding: const EdgeInsets.only(top: AppConstants.spaceSm),
+                child: Text(
+                  'Select a date to continue.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                  textAlign: TextAlign.center,
+                ),
+              ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _DestinationSummary extends StatelessWidget {
-  final Destination destination;
-  const _DestinationSummary({required this.destination});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.all(AppConstants.spaceSm),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurfaceAlt : AppColors.lightSurfaceAlt,
-        borderRadius: BorderRadius.circular(AppConstants.radiusMd),
-      ),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppConstants.radiusSm),
-            child: CachedNetworkImage(
-              imageUrl: destination.coverImage,
-              width: 64,
-              height: 64,
-              fit: BoxFit.cover,
-            ),
-          ),
-          const SizedBox(width: AppConstants.spaceMd),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(destination.city, style: Theme.of(context).textTheme.titleMedium),
-                Text(destination.country, style: Theme.of(context).textTheme.bodySmall),
-              ],
-            ),
-          ),
-          Text(
-            AppFormatters.currency(destination.price),
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-        ],
       ),
     );
   }

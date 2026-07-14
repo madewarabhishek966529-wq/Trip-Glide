@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
 import '../../core/constants.dart';
+import '../../models/category.dart';
+import '../../models/destination.dart';
 import '../../providers/destination_provider.dart';
 import '../../providers/favorite_provider.dart';
-import '../../providers/user_provider.dart';
+import '../../providers/navigation_provider.dart';
+import '../../providers/search_provider.dart';
 import '../../repositories/category_repository.dart';
+import '../../routes/app_routes.dart';
 import '../../widgets/error_view.dart';
-import 'widgets/category_filter_row.dart';
+import '../../widgets/shimmer_box.dart';
+import 'widgets/category_row.dart';
 import 'widgets/destination_rail.dart';
-import 'widgets/greeting_header.dart';
-import 'widgets/home_search_bar.dart';
+import 'widgets/featured_carousel.dart';
+import 'widgets/home_header.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,115 +24,94 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final _categoryRepo = CategoryRepository();
+  final CategoryRepository _categoryRepo = CategoryRepository();
+  late final List<Category> _categories = _categoryRepo.getAll();
 
-  @override
-  void initState() {
-    super.initState();
-    // Kick off every provider's initial load once, right after this
-    // screen's first frame — not in build(), so a rebuild never
-    // re-triggers a Hive read.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<DestinationProvider>().load();
-      context.read<FavoriteProvider>().load();
-      context.read<UserProvider>().load();
-    });
+  void _openDestination(Destination destination) {
+    context.read<DestinationProvider>().recordView(destination.id);
+    Navigator.of(context).pushNamed(AppRoutes.details, arguments: destination.id);
   }
 
-  Future<void> _refresh() async {
-    context.read<DestinationProvider>().load();
-    context.read<FavoriteProvider>().load();
+  void _onSearchChanged(String value) {
+    if (value.trim().isEmpty) return;
+    context.read<SearchProvider>().updateQuery(value);
+    context.read<NavigationProvider>().setIndex(1);
+  }
+
+  void _openFilters() {
+    context.read<NavigationProvider>().setIndex(1);
   }
 
   @override
   Widget build(BuildContext context) {
-    final destinations = context.watch<DestinationProvider>();
-    final favorites = context.watch<FavoriteProvider>();
+    final destinationProvider = context.watch<DestinationProvider>();
+    final favoriteIds = context.watch<FavoriteProvider>().favoriteIds;
 
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _refresh,
-          child: Builder(
-            builder: (context) {
-              if (destinations.status == LoadStatus.error) {
-                return ErrorView(
-                  message: destinations.errorMessage ?? 'Could not load destinations.',
-                  onRetry: () => context.read<DestinationProvider>().load(),
-                );
-              }
-
-              final isLoading = destinations.status == LoadStatus.initial ||
-                  destinations.status == LoadStatus.loading;
-
-              final categoryFiltered = destinations.filteredByCategory;
-              final popular = destinations.selectedCategoryId.isEmpty
-                  ? destinations.popular
-                  : categoryFiltered;
-              final excludeFromRecommended = [
-                ...favorites.favoriteIds,
-                ...destinations.recentlyViewed.map((d) => d.id),
-              ];
-              final recommended = destinations.recommendedExcluding(excludeFromRecommended);
-              final topRated = destinations.topRated;
-              final recentlyViewed = destinations.recentlyViewed;
-
-              return ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(vertical: AppConstants.spaceMd),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppConstants.spaceLg),
-                    child: const GreetingHeader(),
-                  ),
-                  const SizedBox(height: AppConstants.spaceLg),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppConstants.spaceLg),
-                    child: const HomeSearchBar(),
-                  ),
-                  const SizedBox(height: AppConstants.spaceLg),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppConstants.spaceLg),
-                    child: Text('Select your next trip', style: Theme.of(context).textTheme.titleLarge),
-                  ),
-                  const SizedBox(height: AppConstants.spaceSm),
-                  CategoryFilterRow(categories: _categoryRepo.getAll()),
-                  const SizedBox(height: AppConstants.spaceLg),
-                  DestinationRail(
-                    title: destinations.selectedCategoryId.isEmpty ? 'Popular destinations' : 'Filtered results',
-                    destinations: popular,
-                    isLoading: isLoading,
-                    emptyMessage: 'No destinations in this category yet.',
-                    onSeeAll: () => context.read<DestinationProvider>().selectCategory(''),
-                  ),
-                  const SizedBox(height: AppConstants.spaceLg),
-                  DestinationRail(
-                    title: 'Recommended for you',
-                    destinations: recommended,
-                    isLoading: isLoading,
-                    emptyMessage: 'Favorite a few places to sharpen your recommendations.',
-                  ),
-                  const SizedBox(height: AppConstants.spaceLg),
-                  DestinationRail(
-                    title: 'Top rated',
-                    destinations: topRated,
-                    isLoading: isLoading,
-                    emptyMessage: 'No ratings yet.',
-                  ),
-                  const SizedBox(height: AppConstants.spaceLg),
-                  DestinationRail(
-                    title: 'Recently viewed',
-                    destinations: recentlyViewed,
-                    isLoading: false,
-                    emptyMessage: 'Places you open will show up here.',
-                  ),
-                  const SizedBox(height: AppConstants.spaceXxl),
-                ],
-              );
-            },
-          ),
+          onRefresh: () async => destinationProvider.load(),
+          child: _buildBody(destinationProvider, favoriteIds),
         ),
       ),
+    );
+  }
+
+  Widget _buildBody(DestinationProvider provider, Set<String> favoriteIds) {
+    if (provider.status == LoadStatus.loading || provider.status == LoadStatus.initial) {
+      return ListView(
+        children: const [
+          SizedBox(height: 120),
+          DestinationRailShimmer(),
+          SizedBox(height: 24),
+          DestinationRailShimmer(),
+        ],
+      );
+    }
+
+    if (provider.status == LoadStatus.error) {
+      return Center(
+        child: ErrorView(message: provider.errorMessage ?? 'Failed to load destinations.', onRetry: provider.load),
+      );
+    }
+
+    final featured = provider.selectedCategoryId.isEmpty
+        ? provider.popular
+        : provider.filteredByCategory;
+
+    final recentlyViewedIds = provider.recentlyViewed.map((d) => d.id).toList();
+    final recommended = provider.recommendedExcluding([...favoriteIds, ...recentlyViewedIds]);
+
+    return ListView(
+      children: [
+        HomeHeader(onSearchChanged: _onSearchChanged, onFilterTap: _openFilters),
+        FeaturedCarousel(destinations: featured, onSeeMore: _openDestination),
+        const SizedBox(height: AppConstants.spaceLg),
+        CategoryRow(
+          categories: _categories,
+          selectedId: provider.selectedCategoryId,
+          onSelect: provider.selectCategory,
+        ),
+        const SizedBox(height: AppConstants.spaceLg),
+        DestinationRail(
+          title: 'Recommended for you',
+          destinations: recommended,
+          onTap: _openDestination,
+        ),
+        const SizedBox(height: AppConstants.spaceLg),
+        DestinationRail(
+          title: 'Top rated',
+          destinations: provider.topRated,
+          onTap: _openDestination,
+        ),
+        const SizedBox(height: AppConstants.spaceLg),
+        DestinationRail(
+          title: 'Recently viewed',
+          destinations: provider.recentlyViewed,
+          onTap: _openDestination,
+        ),
+        const SizedBox(height: AppConstants.spaceXl),
+      ],
     );
   }
 }
